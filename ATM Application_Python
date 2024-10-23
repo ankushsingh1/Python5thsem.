@@ -1,0 +1,272 @@
+import hashlib
+import time
+
+class User:
+    MAX_DEPOSIT_LIMIT = 100000
+    MAX_WITHDRAW_LIMIT = 50000
+    MIN_BALANCE_NOTIFICATION = 75000
+    LOCK_DURATION = 120  # Lock duration in seconds
+
+    def __init__(self, user_id, password, balance=5000):
+        self.user_id = user_id
+        self.password_hash = self._hash_password(password)
+        self.balance = balance
+        self.failed_login_attempts = 0
+        self.locked_until = 0
+
+    def _hash_password(self, password):
+        return hashlib.sha256(password.encode()).hexdigest()
+
+    def verify_password(self, password):
+        return self.password_hash == self._hash_password(password)
+
+    def deposit(self, amount, denominations):
+        if self.is_locked:
+            print("Account is locked. Please try again later.")
+        else:
+            total_deposit = sum(denomination * count for denomination, count in denominations.items())
+            if total_deposit > self.MAX_DEPOSIT_LIMIT:
+                print(f"Maximum deposit limit exceeded (₹{self.MAX_DEPOSIT_LIMIT}).")
+            else:
+                self.balance += total_deposit
+                print("Deposit successful!")
+                self.check_notification()
+
+    def withdraw(self, amount, denominations):
+        if self.is_locked:
+            print("Account is locked. Please try again later.")
+        else:
+            total_withdraw = sum(denomination * count for denomination, count in denominations.items())
+            if total_withdraw > self.MAX_WITHDRAW_LIMIT:
+                print(f"Maximum withdrawal limit exceeded (₹{self.MAX_WITHDRAW_LIMIT}).")
+            elif total_withdraw > self.balance:
+                print("Insufficient balance!")
+            else:
+                self.balance -= total_withdraw
+                print("Withdrawal successful!")
+                self.check_notification()
+
+    def check_balance(self):
+        print(f"Current Balance: ₹{self.balance}")
+        self.check_notification()
+
+    def check_notification(self):
+        if self.balance < self.MIN_BALANCE_NOTIFICATION:
+            print("Notification: Your balance is less than ₹75,000.")
+
+    def update_credentials(self, new_password):
+        self.password_hash = self._hash_password(new_password)
+        print("Credentials updated successfully!")
+
+    @property
+    def is_locked(self):
+        return time.time() < self.locked_until
+
+    def unlock_account(self):
+        self.failed_login_attempts = 0
+        self.locked_until = 0
+        print(f"Account unlocked! You have {self.LOCK_DURATION} seconds to log in.")
+
+    def increment_failed_attempts(self):
+        self.failed_login_attempts += 1
+        if self.failed_login_attempts >= 3:
+            self.locked_until = time.time() + self.LOCK_DURATION  # Lock account for specified duration
+
+
+class Admin:
+    MAX_BALANCE = 300000
+
+    def __init__(self, admin_id, password):
+        self.admin_id = admin_id
+        self.password_hash = self._hash_password(password)
+        self.balance = 0
+        self.failed_login_attempts = 0
+        self.locked_until = 0
+
+    def _hash_password(self, password):
+        return hashlib.sha256(password.encode()).hexdigest()
+
+    def verify_password(self, password):
+        return self.password_hash == self._hash_password(password)
+
+    def deposit(self, amount, denominations):
+        if self.is_locked:
+            print("Account is locked. Please try again later.")
+        else:
+            total_deposit = sum(denomination * count for denomination, count in denominations.items())
+            if total_deposit > self.MAX_BALANCE:
+                print(f"Maximum cash deposit limit exceeded (₹{self.MAX_BALANCE}).")
+            else:
+                self.balance += total_deposit
+                print("Deposit successful!")
+                self.check_notification()
+
+    def check_total_balance(self, user_list):
+        total_balance = sum(user.balance for user in user_list) + self.balance
+        print(f"Total Bank Balance: ₹{total_balance}")
+        self.check_notification()
+
+    def check_notification(self):
+        if self.balance < User.MIN_BALANCE_NOTIFICATION:
+            print("Notification: Bank's total balance is less than ₹75,000.")
+
+    @property
+    def is_locked(self):
+        return time.time() < self.locked_until
+
+    def unlock_account(self):
+        self.failed_login_attempts = 0
+        self.locked_until = 0
+        print(f"Account unlocked! You have {User.LOCK_DURATION} seconds to log in.")
+
+    def increment_failed_attempts(self):
+        self.failed_login_attempts += 1
+        if self.failed_login_attempts >= 3:
+            self.locked_until = time.time() + User.LOCK_DURATION  # Lock account for specified duration
+
+
+def register_user(users):
+    user_id = input("Enter desired user ID: ")
+    if user_id in users:
+        print("User ID already exists. Please choose a different one.")
+        return
+
+    password = input("Enter password: ")
+    new_user = User(user_id, password)
+    users[user_id] = new_user
+    print("User registration successful!")
+
+
+def login(users, user_id, password, user_type):
+    user = users.get(user_id)
+    if user:
+        if user.is_locked:
+            print("Account is locked. Please try again later.")
+            return None
+        elif user.verify_password(password):
+            print(f"Login successful! Welcome, {user_id}!")
+            user.failed_login_attempts = 0  # Reset failed login attempts
+            return user
+    # Increment failed login attempts if the user is not found or the password is incorrect
+    if user:
+        user.increment_failed_attempts()
+    print("Invalid user ID or password!")
+    return None
+
+
+def admin_menu(admin, user_list):
+    while True:
+        print("\n***** Admin Menu *****")
+        print("1. Check Total Bank Balance")
+        print("2. Deposit Cash into Bank")
+        print("3. Unlock User Account")
+        print("4. Logout")
+
+        choice = input("\nEnter your choice: ")
+
+        if choice == "1":
+            admin.check_total_balance(user_list)
+
+        elif choice == "2":
+            amount = int(input("Enter the amount to deposit into Bank: ₹"))
+            denominations = get_denominations()
+            admin.deposit(amount, denominations)
+
+        elif choice == "3":
+            admin.unlock_account()
+
+        elif choice == "4":
+            break
+
+        else:
+            print("Invalid choice!")
+
+
+def user_menu(user):
+    while True:
+        print("\n***** User Menu *****")
+        print("1. Deposit Cash into Account")
+        print("2. Withdraw Cash from Account")
+        print("3. Check Account Balance")
+        print("4. Logout")
+
+        choice = input("\nEnter your choice: ")
+
+        if choice == "1":
+            amount = int(input("Enter the amount to deposit into Account: ₹"))
+            denominations = get_denominations()
+            user.deposit(amount, denominations)
+
+        elif choice == "2":
+            amount = int(input("Enter the amount to withdraw from Account: ₹"))
+            denominations = get_denominations()
+            user.withdraw(amount, denominations)
+
+        elif choice == "3":
+            user.check_balance()
+
+        elif choice == "4":
+            break
+
+        else:
+            print("Invalid choice!")
+
+
+def get_denominations():
+    denominations = {}
+    while True:
+        denomination = int(input("Enter denomination (0 to finish): ₹"))
+        if denomination == 0:
+            break
+        count = int(input(f"Enter count for ₹{denomination}: "))
+        denominations[denomination] = count
+    return denominations
+
+
+def main():
+    users = {
+        "user1": User("user1", "pass1"),
+        "user2": User("user2", "pass2"),
+        "user3": User("user3", "pass3"),
+        "user4": User("user4", "pass4"),
+        "user5": User("user5", "pass5")
+    }
+
+    admin = Admin("admin", "adminpass")
+
+    while True:
+        print("\n***** Welcome to the ATM *****")
+        print("1. Admin Login")
+        print("2. User Login")
+        print("3. Register New User")
+        print("4. Exit")
+
+        choice = input("\nEnter your choice: ")
+
+        if choice == "1":
+            userid = input("Enter admin user ID: ")
+            password = input("Enter admin password: ")
+            admin_user = login({"admin": admin}, userid, password, "admin")
+            if admin_user:
+                admin_menu(admin, list(users.values()))
+
+        elif choice == "2":
+            userid = input("Enter user ID: ")
+            password = input("Enter password: ")
+            user = login(users, userid, password, "user")
+            if user:
+                user_menu(user)
+
+        elif choice == "3":
+            register_user(users)
+
+        elif choice == "4":
+            print("Thank you for using ABC Bank ATM. Goodbye!")
+            break
+
+        else:
+            print("Invalid choice!")
+
+
+if __name__ == "__main__":
+    main()
